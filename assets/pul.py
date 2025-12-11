@@ -1,30 +1,41 @@
 from PIL import Image
 
-# Hex string hasil dari audio kamu
+# Hex string hasil gabungan kamu
 hex_data = "2F2F1F2122222222202121292323282722292621211C1C212821212923221D1D"
 
-# 1. Konversi Hex ke Biner (0 dan 1)
-# zfill(256) memastikan totalnya pas 256 bit
-binary_string = bin(int(hex_data, 16))[2:].zfill(256)
+# 1. Ubah Hex ke List Bit (0 dan 1)
+# Total 256 bit
+bits = [int(b) for b in bin(int(hex_data, 16))[2:].zfill(256)]
 
-# 2. Setup Ukuran Gambar
-# Karena 256 bit, akar kuadratnya adalah 16. Jadi gambar 16x16.
-width = 16
-height = 16
+# Ukuran Grid (256 bit = 16x16 pixel)
+size = 16
 
-# 3. Buat Gambar Baru (Mode '1' artinya 1-bit pixels, hitam putih)
-img = Image.new('1', (width, height))
+# 2. Buat Gambar Baru
+img = Image.new('1', (size, size))
+pixels = []
 
-# 4. Masukkan data pixel
-# Kita ubah string '1' jadi putih (1) dan '0' jadi hitam (0), atau sebaliknya sesuai standar QR
-pixels = [int(b) for b in binary_string]
+# 3. TRANSPOSE DATA (Kunci Perbaikan!)
+# Kita baca data seolah-olah itu Kolom, lalu kita susun jadi Baris untuk gambar
+# Loop Baris dulu, baru Kolom
+for y in range(size):
+    for x in range(size):
+        # Rumus ini mengambil bit secara vertikal (kolom)
+        # index = (x * 16) + y
+        src_idx = (x * size) + y
+        
+        # Ambil bitnya
+        bit = bits[src_idx]
+        
+        # 4. Invert Warna (0 jadi Putih, 1 jadi Hitam) sesuai standar QR
+        # Jika bit 1 -> Hitam (0), Jika bit 0 -> Putih (1)
+        color = 0 if bit == 1 else 1
+        pixels.append(color)
+
 img.putdata(pixels)
 
-# 5. Perbesar Gambar (Upscale)
-# Gambar 16px itu sekecil kutu, kita perbesar 20x lipat jadi 320x320 biar bisa discan
-img = img.resize((width * 20, height * 20), Image.NEAREST)
+# 5. Perbesar Gambar (Upscale) agar mudah discan
+img = img.resize((320, 320), Image.NEAREST)
 
-# 6. Simpan File
-filename = "flag_qr.png"
-img.save(filename)
-print(f"Sukses! Gambar disimpan sebagai: {filename}")
+# Simpan
+img.save("flag_fixed.png")
+print("Gambar berhasil diperbaiki! Silakan download 'flag_fixed.png'")
